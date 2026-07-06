@@ -83,6 +83,24 @@ api.get('/api/health', (_req, res) => {
   });
 });
 
+// Retry helper for transient upstream 503/429 (preview models overload)
+async function generateWithRetry(request, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await ai.models.generateContent(request);
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e?.message || '');
+      const transient = /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand/i.test(msg);
+      if (!transient || i === attempts - 1) throw e;
+      const wait = 400 * Math.pow(2, i) + Math.random() * 200;
+      await new Promise(r => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}
+
 // POST /api/analyze — send text, receive structured JSON mood analysis.
 api.post('/api/analyze', async (req, res) => {
   if (!ai) return res.status(503).json({ error: 'GEMINI_API_KEY not configured', setupRequired: true });
@@ -91,7 +109,7 @@ api.post('/api/analyze', async (req, res) => {
   if (text.length > 4000) return res.status(400).json({ error: 'Message too long.' });
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateWithRetry({
       model: MODEL,
       contents: `The user says: """${text}"""\n\nAnalyze their emotional state and return the JSON.`,
       config: {
@@ -135,14 +153,13 @@ api.post('/api/chat', async (req, res) => {
     : '';
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateWithRetry({
       model: MODEL,
       contents,
       config: {
         systemInstruction: SYSTEM_PROMPT + moodContext,
         temperature: 0.9,
-        thinkingConfig: { thinkingLevel: 'low' },
-        maxOutputTokens: 400,
+        maxOutputTokens: 1200,
       },
     });
     res.json({ ok: true, reply: response.text ?? '…' });
