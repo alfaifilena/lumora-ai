@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0b0716" />
+<title>Lumora AI · Transform Your Emotions Into Beautiful AI Experiences</title>
+<meta name="description" content="Lumora AI turns your feelings into an immersive visual experience. Powered by Google Gemini." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+<link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+</head>
+<body data-mood="neutral" data-theme="dark">
+
+<!-- Aurora + particles background layers -->
+<div class="aurora" aria-hidden="true">
+  <div class="aurora__blob aurora__blob--a"></div>
+  <div class="aurora__blob aurora__blob--b"></div>
+  <div class="aurora__blob aurora__blob--c"></div>
+  <div class="aurora__grain"></div>
+</div>
+<canvas id="particles" class="particles" aria-hidden="true"></canvas>
+<div id="cursor-glow" class="cursor-glow" aria-hidden="true"></div>
+
+<!-- Loading screen -->
+<div id="boot" class="boot">
+  <div class="boot__logo">
+    <span class="boot__spark">✦</span>
+    <span class="boot__name">Lumora</span>
+  </div>
+  <div class="boot__bar"><span></span></div>
+  <p class="boot__hint">summoning your aura…</p>
+</div>
+
+<!-- Header -->
+<header class="nav" data-testid="nav">
+  <a href="#top" class="brand" data-testid="brand">
+    <span class="brand__mark">✦</span>
+    <span class="brand__text">Lumora <em>AI</em></span>
+  </a>
+  <nav class="nav__links">
+    <a href="#analyze" data-testid="nav-analyze">Analyze</a>
+    <a href="#dashboard" data-testid="nav-dashboard">Insight</a>
+    <a href="#history" data-testid="nav-history">History</a>
+    <button id="sound-toggle" class="icon-btn" aria-label="Toggle sound" data-testid="sound-toggle" title="Toggle sound">
+      <svg class="i-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+      <svg class="i-sound-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>
+    </button>
+    <button id="theme-toggle" class="icon-btn" aria-label="Toggle theme" data-testid="theme-toggle" title="Toggle theme">
+      <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    </button>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- Setup notice (shown only if no API key) -->
+  <section id="setup-notice" class="setup" hidden data-testid="setup-notice">
+    <div class="setup__card glass">
+      <div class="setup__icon">🔑</div>
+      <h2>One tiny step to light up Lumora</h2>
+      <p>Please add your <code>GEMINI_API_KEY</code> inside <strong>Replit Secrets</strong> (or your <code>.env</code> file) and restart the server.</p>
+      <ol>
+        <li>Grab a key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a></li>
+        <li>Add <code>GEMINI_API_KEY=your_key_here</code></li>
+        <li>Restart — Lumora will glow to life ✨</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- HERO / ANALYZE -->
+  <section id="analyze" class="hero">
+    <div class="hero__meta">
+      <span class="pill" data-testid="pill-powered">
+        <span class="pill__dot"></span>
+        Powered by Google Gemini AI
+      </span>
+    </div>
+    <h1 class="hero__title">
+      <span class="reveal">Transform your</span>
+      <span class="reveal reveal--italic">emotions</span>
+      <span class="reveal">into <em>beautiful</em> AI experiences.</span>
+    </h1>
+    <p class="hero__sub reveal">
+      Write how you feel. Lumora reads the light behind your words and reshapes the world around you — colors, sounds, rituals — into a small, gentle sanctuary.
+    </p>
+
+    <div class="composer glass reveal" data-testid="composer">
+      <textarea
+        id="feeling-input"
+        class="composer__input"
+        placeholder="Describe your thoughts… what's alive in you right now?"
+        rows="4"
+        maxlength="1200"
+        aria-label="How are you feeling today?"
+        data-testid="feeling-input"></textarea>
+      <div class="composer__row">
+        <div class="composer__hint">
+          <span id="char-count">0</span>/1200 · Press <kbd>⌘</kbd>+<kbd>↵</kbd> to analyze
+        </div>
+        <button id="analyze-btn" class="btn btn--primary" data-testid="analyze-btn">
+          <span class="btn__label">Analyze my mood</span>
+          <span class="btn__arrow">→</span>
+          <span class="btn__glow"></span>
+          <span class="btn__ripple"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hero__chips" role="list">
+      <button class="chip" data-prompt="I feel light and grateful today, like everything is quietly in place." data-testid="chip-1">✨ grateful</button>
+      <button class="chip" data-prompt="I feel restless and anxious, my mind keeps racing." data-testid="chip-2">🌀 anxious</button>
+      <button class="chip" data-prompt="I feel a soft sadness I can't quite name." data-testid="chip-3">🌧️ tender</button>
+      <button class="chip" data-prompt="I feel unstoppable, focused, and full of fire today." data-testid="chip-4">🔥 motivated</button>
+      <button class="chip" data-prompt="I feel lonely tonight, like the world dimmed." data-testid="chip-5">🌌 lonely</button>
+    </div>
+  </section>
+
+  <!-- LOADING STATE -->
+  <section id="analyzing" class="analyzing" hidden data-testid="analyzing">
+    <div class="analyzing__orb"><span></span><span></span><span></span></div>
+    <p class="analyzing__text">Reading the light behind your words<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="dashboard" hidden data-testid="dashboard">
+    <header class="dashboard__head">
+      <div>
+        <p class="eyebrow">Your aura today</p>
+        <h2 id="mood-headline" class="dashboard__title">…</h2>
+        <p id="mood-explanation" class="dashboard__sub">…</p>
+      </div>
+      <div class="dashboard__actions">
+        <button id="share-btn" class="btn btn--ghost" data-testid="share-btn"><span>Share</span></button>
+        <button id="pdf-btn" class="btn btn--ghost" data-testid="pdf-btn"><span>Export PDF</span></button>
+        <button id="reset-btn" class="btn btn--ghost" data-testid="reset-btn"><span>New reading</span></button>
+      </div>
+    </header>
+
+    <div class="cards">
+      <article class="card card--wide glass" data-testid="card-mood">
+        <div class="card__label">Mood</div>
+        <div class="card__mood">
+          <div id="mood-emoji" class="card__emoji">✦</div>
+          <div>
+            <div id="mood-name" class="card__value">—</div>
+            <div class="card__meter">
+              <div id="confidence-bar" class="card__meter-fill"></div>
+            </div>
+            <div id="confidence-text" class="card__hint">— confidence</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card glass" data-testid="card-insight">
+        <div class="card__label">💡 AI Insight</div>
+        <p id="ai-insight" class="card__text">—</p>
+      </article>
+
+      <article class="card glass" data-testid="card-selfcare">
+        <div class="card__label">🌱 Self care</div>
+        <p id="selfcare-tip" class="card__text">—</p>
+      </article>
+
+      <article class="card glass" data-testid="card-breathing">
+        <div class="card__label">🧘 Breathing exercise</div>
+        <p id="breathing" class="card__text">—</p>
+      </article>
+
+      <article class="card glass" data-testid="card-quote">
+        <div class="card__label">💬 Quote</div>
+        <blockquote id="quote" class="card__quote">—</blockquote>
+        <cite id="quote-author" class="card__cite">— unknown</cite>
+      </article>
+
+      <article class="card glass" data-testid="card-affirmation">
+        <div class="card__label">⭐ Affirmation</div>
+        <p id="affirmation" class="card__text card__text--italic">—</p>
+      </article>
+
+      <article class="card glass" data-testid="card-music">
+        <div class="card__label">🎵 Music</div>
+        <p id="music" class="card__text">—</p>
+        <a id="music-link" href="#" target="_blank" rel="noreferrer" class="card__link" hidden>Open on Spotify →</a>
+      </article>
+
+      <article class="card glass" data-testid="card-intention">
+        <div class="card__label">🎯 Today's intention</div>
+        <p id="intention" class="card__text">—</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="history" class="history">
+    <header class="history__head">
+      <div>
+        <p class="eyebrow">Journal</p>
+        <h2>Mood constellation</h2>
+        <p class="history__sub">A soft record of every reading you've taken.</p>
+      </div>
+      <button id="clear-history" class="btn btn--ghost btn--sm" data-testid="clear-history">Clear</button>
+    </header>
+    <div id="history-grid" class="history__grid" data-testid="history-grid">
+      <div class="empty" data-testid="history-empty">
+        <div class="empty__mark">✦</div>
+        <p>Your constellation is empty. Take your first reading above.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="foot">
+    <p>Lumora AI · a gentle experiment in emotional design ·
+      <a href="https://aistudio.google.com" target="_blank" rel="noreferrer">Gemini</a></p>
+  </footer>
+</main>
+
+<!-- FLOATING CHAT -->
+<button id="chat-fab" class="fab" aria-label="Open Lumora chat" data-testid="chat-fab">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  <span class="fab__pulse"></span>
+</button>
+
+<aside id="chat-panel" class="chat" hidden data-testid="chat-panel">
+  <header class="chat__head">
+    <div class="chat__title">
+      <span class="chat__spark">✦</span>
+      <div>
+        <div class="chat__name">Lumora</div>
+        <div class="chat__status"><span class="chat__dot"></span> here with you</div>
+      </div>
+    </div>
+    <button id="chat-close" class="icon-btn" aria-label="Close chat" data-testid="chat-close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </header>
+  <div id="chat-log" class="chat__log" data-testid="chat-log">
+    <div class="chat__msg chat__msg--bot">
+      <p>Hi, I'm Lumora. Tell me anything — I'll listen without judgement. ✦</p>
+    </div>
+  </div>
+  <form id="chat-form" class="chat__composer" data-testid="chat-form">
+    <input id="chat-input" type="text" placeholder="Say something…" autocomplete="off" data-testid="chat-input" />
+    <button type="submit" class="icon-btn icon-btn--send" aria-label="Send" data-testid="chat-send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </form>
+</aside>
+
+<!-- Toasts -->
+<div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+<!-- jsPDF for client-side PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="/script.js" defer type="module"></script>
+</body>
+</html>
