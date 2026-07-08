@@ -452,7 +452,23 @@ body[data-sound="off"] .i-sound-on { display: none; }
   display: flex; flex-direction: column; gap: 6px;
   transition: all 0.35s var(--ease);
   position: relative; overflow: hidden;
+  /* --item-color/--item-glow are set via [data-item-mood] classes below (no inline styles) */
+  --item-color: #8b5cf6;
+  --item-glow: rgba(139, 92, 246, 0.19);
 }
+
+/* Per-mood colors for history tiles — driven by data attribute so no inline style needed */
+.history-item[data-item-mood="happy"]     { --item-color:#facc15; --item-glow:rgba(250,204,21,0.19); }
+.history-item[data-item-mood="calm"]      { --item-color:#38bdf8; --item-glow:rgba(56,189,248,0.19); }
+.history-item[data-item-mood="sad"]       { --item-color:#3b82f6; --item-glow:rgba(59,130,246,0.19); }
+.history-item[data-item-mood="excited"]   { --item-color:#a855f7; --item-glow:rgba(168,85,247,0.19); }
+.history-item[data-item-mood="motivated"] { --item-color:#eab308; --item-glow:rgba(234,179,8,0.19);  }
+.history-item[data-item-mood="lonely"]    { --item-color:#7c3aed; --item-glow:rgba(124,58,237,0.19); }
+.history-item[data-item-mood="hopeful"]   { --item-color:#fb923c; --item-glow:rgba(251,146,60,0.19); }
+.history-item[data-item-mood="anxious"]   { --item-color:#f472b6; --item-glow:rgba(244,114,182,0.19);}
+.history-item[data-item-mood="angry"]     { --item-color:#ef4444; --item-glow:rgba(239,68,68,0.19);  }
+.history-item[data-item-mood="grateful"]  { --item-color:#f59e0b; --item-glow:rgba(245,158,11,0.19); }
+.history-item[data-item-mood="neutral"]   { --item-color:#8b5cf6; --item-glow:rgba(139,92,246,0.19); }
 .history-item::before {
   content: ""; position: absolute; inset: 0; opacity: 0.5;
   background: radial-gradient(circle at 100% 0%, var(--item-glow, transparent), transparent 60%);

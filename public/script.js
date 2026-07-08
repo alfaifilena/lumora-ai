@@ -6,6 +6,22 @@
 const $  = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
+// Generic user-facing error strings — never surface raw server / AI responses.
+const USER_ERRORS = {
+  analyze: 'Something went softly wrong. Please try again in a moment.',
+  chat:    'Lumora is quiet right now. Try again shortly.',
+  share:   'Could not share right now.',
+  pdf:     'Could not create the PDF.',
+  network: 'Cannot reach the Lumora server.',
+  input:   'Please share a little more about how you feel.',
+  setup:   'Lumora needs an API key to fully wake up.',
+};
+
+// Log details to console for debugging, but never show them to end users.
+function reportError(scope, err) {
+  try { console.warn(`[Lumora:${scope}]`, err?.message || err); } catch { /* noop */ }
+}
+
 // ---------- State ----------
 const state = {
   currentMood: null,        // last detected mood string
@@ -57,9 +73,9 @@ async function checkHealth() {
     if (!j.ready) {
       $('#setup-notice').hidden = false;
     }
-  } catch {
-    // if API unreachable, still allow UI. Show gentle toast.
-    toast('Cannot reach the Lumora server.', 'err');
+  } catch (err) {
+    reportError('health', err);
+    toast(USER_ERRORS.network, 'err');
   }
 }
 
@@ -127,7 +143,7 @@ function wireUI() {
 // ---------- Analyze flow ----------
 async function analyze() {
   const text = $('#feeling-input').value.trim();
-  if (text.length < 3) { toast('Please share a little more about how you feel.', 'err'); return; }
+  if (text.length < 3) { toast(USER_ERRORS.input, 'err'); return; }
 
   playTone('chime');
   $('#analyzing').hidden = false;
@@ -140,11 +156,19 @@ async function analyze() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
 
     if (!r.ok) {
-      if (j.setupRequired) $('#setup-notice').hidden = false;
-      throw new Error(j.error || 'Something went wrong.');
+      // Show setup notice for the specific known "setup required" case,
+      // otherwise show a generic user-friendly message.
+      if (j.setupRequired) {
+        $('#setup-notice').hidden = false;
+        toast(USER_ERRORS.setup, 'err');
+      } else {
+        toast(USER_ERRORS.analyze, 'err');
+      }
+      reportError('analyze', new Error(`HTTP ${r.status}`));
+      return;
     }
 
     state.currentData = j.data;
@@ -154,7 +178,8 @@ async function analyze() {
     saveToHistory(j.data);
     playTone('bloom');
   } catch (err) {
-    toast(err.message || 'Analysis failed.', 'err');
+    reportError('analyze', err);
+    toast(USER_ERRORS.analyze, 'err');
   } finally {
     $('#analyzing').hidden = true;
   }
@@ -202,16 +227,35 @@ function applyMoodTheme(mood) {
 }
 
 // ---------- History (localStorage) ----------
+// Strict whitelist / regex validation so a tampered localStorage cannot inject
+// unexpected values into the DOM or CSS variables.
+const HEX_COLOR_RE = /^#[0-9a-f]{3}([0-9a-f]{3})?$/i;
+const VALID_MOODS = new Set(['happy','calm','sad','excited','motivated','lonely','hopeful','anxious','angry','grateful','neutral']);
+
+function isValidHistoryItem(h) {
+  if (!h || typeof h !== 'object') return false;
+  if (typeof h.mood !== 'string' || !VALID_MOODS.has(h.mood)) return false;
+  if (typeof h.emoji !== 'string' || [...h.emoji].length > 4) return false;
+  if (typeof h.color !== 'string' || !HEX_COLOR_RE.test(h.color)) return false;
+  if (typeof h.date !== 'string' || Number.isNaN(Date.parse(h.date))) return false;
+  return true;
+}
+
 function loadHistory() {
-  try { return JSON.parse(localStorage.getItem('lumora.history') || '[]'); }
-  catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem('lumora.history') || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(isValidHistoryItem).slice(0, 40);
+  } catch { return []; }
 }
 function saveToHistory(d) {
   const entry = {
-    mood: d.mood, emoji: d.emoji || MOOD_EMOJI[d.mood] || '✦',
-    color: MOOD_COLOR[d.mood] || '#8b5cf6', date: new Date().toISOString(),
-    quote: d.quote, confidence: d.confidence,
+    mood: d.mood,
+    emoji: d.emoji || MOOD_EMOJI[d.mood] || '✦',
+    color: MOOD_COLOR[d.mood] || '#8b5cf6',
+    date: new Date().toISOString(),
   };
+  if (!isValidHistoryItem(entry)) return; // defensive: never save malformed
   state.history.unshift(entry);
   state.history = state.history.slice(0, 40);
   localStorage.setItem('lumora.history', JSON.stringify(state.history));
@@ -245,20 +289,21 @@ function renderHistory() {
 
   const frag = document.createDocumentFragment();
   state.history.forEach((h, i) => {
+    if (!isValidHistoryItem(h)) return; // never render invalid items
+
     const item = document.createElement('div');
     item.className = 'history-item';
+    // Color-by-mood is handled via CSS on [data-item-mood="…"] — no inline style needed.
+    item.setAttribute('data-item-mood', h.mood);
     item.setAttribute('data-testid', `history-item-${i}`);
-    // CSS custom props set via setProperty (safe — parser rejects invalid values).
-    item.style.setProperty('--item-color', String(h.color || '#8b5cf6'));
-    item.style.setProperty('--item-glow', String(h.color || '#8b5cf6') + '30');
 
     const emoji = document.createElement('div');
     emoji.className = 'history-item__emoji';
-    emoji.textContent = String(h.emoji || '✦');
+    emoji.textContent = h.emoji;
 
     const mood = document.createElement('div');
     mood.className = 'history-item__mood';
-    mood.textContent = String(h.mood || 'neutral');
+    mood.textContent = h.mood;
 
     const date = document.createElement('div');
     date.className = 'history-item__date';
@@ -279,61 +324,61 @@ function exportPDF() {
   if (!state.currentData) { toast('Analyze your mood first.', 'err'); return; }
   const { jsPDF } = window.jspdf || {};
   if (!jsPDF) { toast('PDF library still loading, try again in a moment.', 'err'); return; }
-  const d = state.currentData;
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  const W = doc.internal.pageSize.getWidth();
-  const H = doc.internal.pageSize.getHeight();
+  try {
+    const d = state.currentData;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
 
-  // Background wash
-  doc.setFillColor(11, 7, 22); doc.rect(0, 0, W, H, 'F');
-  const hex = MOOD_COLOR[d.mood] || '#8b5cf6';
-  const rgb = hexToRgb(hex);
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-  doc.circle(-40, -20, 220, 'F');
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-  doc.circle(W + 40, H + 20, 240, 'F');
+    doc.setFillColor(11, 7, 22); doc.rect(0, 0, W, H, 'F');
+    const hex = MOOD_COLOR[d.mood] || '#8b5cf6';
+    const rgb = hexToRgb(hex);
+    doc.setFillColor(rgb.r, rgb.g, rgb.b);
+    doc.circle(-40, -20, 220, 'F');
+    doc.setFillColor(rgb.r, rgb.g, rgb.b);
+    doc.circle(W + 40, H + 20, 240, 'F');
 
-  // Header
-  doc.setTextColor(244, 239, 255);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(22);
-  doc.text('✦ Lumora AI', 40, 60);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  doc.setTextColor(207, 198, 229);
-  doc.text(new Date().toLocaleString(), 40, 80);
+    doc.setTextColor(244, 239, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(22);
+    doc.text('✦ Lumora AI', 40, 60);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(207, 198, 229);
+    doc.text(new Date().toLocaleString(), 40, 80);
 
-  // Mood
-  doc.setTextColor(244, 239, 255); doc.setFont('helvetica','bold'); doc.setFontSize(46);
-  doc.text(`${d.emoji || ''}  ${cap(d.mood)}`, 40, 160);
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.setTextColor(207,198,229);
-  doc.text(`Confidence: ${Math.round(d.confidence)}%`, 40, 182);
+    doc.setTextColor(244, 239, 255); doc.setFont('helvetica','bold'); doc.setFontSize(46);
+    doc.text(`${d.emoji || ''}  ${cap(d.mood)}`, 40, 160);
+    doc.setFont('helvetica','normal'); doc.setFontSize(11);
+    doc.setTextColor(207,198,229);
+    doc.text(`Confidence: ${Math.round(d.confidence)}%`, 40, 182);
 
-  // Sections
-  let y = 230;
-  const section = (label, text) => {
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.setTextColor(rgb.r, rgb.g, rgb.b);
-    doc.text(label.toUpperCase(), 40, y);
-    doc.setFont('helvetica','normal'); doc.setFontSize(12);
-    doc.setTextColor(244,239,255);
-    const lines = doc.splitTextToSize(text || '—', W - 80);
-    doc.text(lines, 40, y + 16);
-    y += 16 + lines.length * 15 + 16;
-  };
-  section('AI Insight', d.explanation);
-  section('Advice', d.advice);
-  section('Self-care', d.selfCareTip);
-  section('Breathing', d.breathingExercise);
-  section('Affirmation', d.affirmation);
-  section('Quote', `"${d.quote}"  — ${d.quoteAuthor}`);
-  section("Today's intention", d.intention);
+    let y = 230;
+    const section = (label, text) => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.setTextColor(rgb.r, rgb.g, rgb.b);
+      doc.text(label.toUpperCase(), 40, y);
+      doc.setFont('helvetica','normal'); doc.setFontSize(12);
+      doc.setTextColor(244,239,255);
+      const lines = doc.splitTextToSize(text || '—', W - 80);
+      doc.text(lines, 40, y + 16);
+      y += 16 + lines.length * 15 + 16;
+    };
+    section('AI Insight', d.explanation);
+    section('Advice', d.advice);
+    section('Self-care', d.selfCareTip);
+    section('Breathing', d.breathingExercise);
+    section('Affirmation', d.affirmation);
+    section('Quote', `"${d.quote}"  — ${d.quoteAuthor}`);
+    section("Today's intention", d.intention);
 
-  // Footer
-  doc.setFontSize(9); doc.setTextColor(138,131,163);
-  doc.text('Generated by Lumora AI · powered by Google Gemini', 40, H - 30);
+    doc.setFontSize(9); doc.setTextColor(138,131,163);
+    doc.text('Generated by Lumora AI · powered by Google Gemini', 40, H - 30);
 
-  doc.save(`lumora-${d.mood}-${Date.now()}.pdf`);
-  toast('PDF saved ✨', 'ok');
+    doc.save(`lumora-${d.mood}-${Date.now()}.pdf`);
+    toast('PDF saved ✨', 'ok');
+  } catch (err) {
+    reportError('pdf', err);
+    toast(USER_ERRORS.pdf, 'err');
+  }
 }
 function hexToRgb(hex) {
   const s = hex.replace('#','');
@@ -348,10 +393,11 @@ async function shareCard() {
   const d = state.currentData;
   const text = `✦ Lumora AI\n\nI'm feeling ${d.mood} ${d.emoji||''}.\n"${d.quote}" — ${d.quoteAuthor}\n\n${d.affirmation}`;
   if (navigator.share) {
-    try { await navigator.share({ title: 'My Lumora mood', text }); return; } catch { /* cancelled */ }
+    try { await navigator.share({ title: 'My Lumora mood', text }); return; }
+    catch (err) { reportError('share', err); /* user cancelled or unsupported */ }
   }
   try { await navigator.clipboard.writeText(text); toast('Copied to clipboard', 'ok'); }
-  catch { toast('Could not share.', 'err'); }
+  catch (err) { reportError('share', err); toast(USER_ERRORS.share, 'err'); }
 }
 
 // ---------- Chat ----------
@@ -378,14 +424,19 @@ async function sendChat() {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ messages: state.chat, mood: state.currentMood })
     });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
     typing.remove();
-    if (!r.ok) throw new Error(j.error || 'Chat unavailable');
+    if (!r.ok) {
+      appendChatMsg('bot', USER_ERRORS.chat);
+      reportError('chat', new Error(`HTTP ${r.status}`));
+      return;
+    }
     state.chat.push({ role: 'model', text: j.reply });
     appendChatMsg('bot', j.reply);
   } catch (err) {
     typing.remove();
-    appendChatMsg('bot', `Hmm, ${err.message || "something's off"}. Try again in a moment.`);
+    reportError('chat', err);
+    appendChatMsg('bot', USER_ERRORS.chat);
   }
 }
 function appendChatMsg(who, text, typing = false) {

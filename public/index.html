@@ -254,8 +254,12 @@
 <!-- Toasts -->
 <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
-<!-- jsPDF for client-side PDF export -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<!-- jsPDF for client-side PDF export — pinned with SRI hash + crossorigin -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+        defer></script>
 <script src="/script.js" defer type="module"></script>
 </body>
 </html>
