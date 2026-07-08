@@ -26,7 +26,7 @@ function reportError(scope, err) {
 const state = {
   currentMood: null,        // last detected mood string
   currentData: null,        // last full analysis payload
-  history: loadHistory(),
+  history: [],              // populated on DOMContentLoaded via loadHistory()
   soundOn: localStorage.getItem('lumora.sound') === 'on',
   theme: localStorage.getItem('lumora.theme') || 'dark',
   chat: [],                 // [{role, text}]
@@ -58,6 +58,8 @@ const MOOD_MUSIC = {
 document.addEventListener('DOMContentLoaded', () => {
   document.body.dataset.theme = state.theme;
   document.body.dataset.sound = state.soundOn ? 'on' : 'off';
+  // Load persisted history AFTER DOM is ready — avoids any TDZ / init-order edge cases.
+  state.history = loadHistory();
   wireUI();
   setupParticles();
   setupCursorGlow();

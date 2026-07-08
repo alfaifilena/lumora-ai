@@ -137,9 +137,10 @@ app.use(express.json({ limit: '16kb', strict: true }));
 // Emergent's preview environment) rewrite the browser's `Origin` header to an
 // internal cluster hostname regardless of the client's original value. Behind
 // such ingresses, this app-layer Origin check cannot distinguish attacker traffic
-// from legitimate browsers on its own — rate-limiting and strict input validation
-// carry more of the defense. On any deployment where Origin is preserved
-// (most CDN/ingress setups), this check works as intended.
+// from legitimate browsers on its own — rate-limiting, strict Content-Type
+// enforcement, and application-level input validation carry more of the defense.
+// On any deployment where Origin is preserved (most CDN/ingress setups), this
+// check works as intended. We validate against Origin then Referer only.
 // -----------------------------------------------------------------------------
 const ALLOWED_HOSTS = new Set(
   ALLOWED_ORIGINS
@@ -276,6 +277,8 @@ app.post('/api/analyze', analyzeLimiter, async (req, res) => {
 
     parsed.confidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
     parsed.mood = String(parsed.mood || 'neutral').toLowerCase();
+    // Common alias that isn't in the palette — map to the closest whitelisted mood.
+    if (parsed.mood === 'stressed') parsed.mood = 'anxious';
     if (!MOOD_WHITELIST.has(parsed.mood)) parsed.mood = 'neutral';
 
     res.json({ ok: true, data: parsed });
@@ -338,6 +341,14 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
 
+// Map body-parser errors to correct HTTP status codes.
+app.use((err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Payload too large.' });
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Malformed JSON.' });
+  next(err);
+});
+
+// Generic error handler — never leak stack traces to clients.
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err?.message || err);
   res.status(500).json({ error: 'Something unexpected happened.' });
