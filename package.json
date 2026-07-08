@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start:api": "node server.js",
+    "start:web": "node static-server.js",
+    "dev": "node --watch server.js & node --watch static-server.js"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
