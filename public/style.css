@@ -160,6 +160,7 @@ body[data-mood="hopeful"]::after {
   display: grid; place-items: center; gap: 24px;
   background: radial-gradient(ellipse at center, rgba(139,92,246,0.2), var(--bg-0) 70%);
   animation: bootOut 900ms 1400ms var(--ease) forwards;
+  pointer-events: none;  /* never intercept clicks on nav / toggles during the reveal */
 }
 .boot__logo { display: flex; align-items: center; gap: 12px; font-family: var(--font-serif); font-size: 40px; }
 .boot__spark { animation: spin 4s linear infinite; display: inline-block; color: var(--hue-a); }
