@@ -54,7 +54,7 @@ async function checkHealth() {
   try {
     const r = await fetch('/api/health');
     const j = await r.json();
-    if (!j.geminiConfigured) {
+    if (!j.ready) {
       $('#setup-notice').hidden = false;
     }
   } catch {
@@ -226,17 +226,48 @@ function clearHistory() {
 }
 function renderHistory() {
   const grid = $('#history-grid');
+  // Safe DOM rebuild — no innerHTML with user/AI-derived data.
+  while (grid.firstChild) grid.removeChild(grid.firstChild);
+
   if (!state.history.length) {
-    grid.innerHTML = `<div class="empty" data-testid="history-empty"><div class="empty__mark">✦</div><p>Your constellation is empty. Take your first reading above.</p></div>`;
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.setAttribute('data-testid', 'history-empty');
+    const mark = document.createElement('div');
+    mark.className = 'empty__mark';
+    mark.textContent = '✦';
+    const p = document.createElement('p');
+    p.textContent = 'Your constellation is empty. Take your first reading above.';
+    empty.append(mark, p);
+    grid.appendChild(empty);
     return;
   }
-  grid.innerHTML = state.history.map((h, i) => `
-    <div class="history-item" style="--item-color:${h.color}; --item-glow:${h.color}30" data-testid="history-item-${i}">
-      <div class="history-item__emoji">${h.emoji}</div>
-      <div class="history-item__mood">${h.mood}</div>
-      <div class="history-item__date">${formatDate(h.date)}</div>
-    </div>
-  `).join('');
+
+  const frag = document.createDocumentFragment();
+  state.history.forEach((h, i) => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.setAttribute('data-testid', `history-item-${i}`);
+    // CSS custom props set via setProperty (safe — parser rejects invalid values).
+    item.style.setProperty('--item-color', String(h.color || '#8b5cf6'));
+    item.style.setProperty('--item-glow', String(h.color || '#8b5cf6') + '30');
+
+    const emoji = document.createElement('div');
+    emoji.className = 'history-item__emoji';
+    emoji.textContent = String(h.emoji || '✦');
+
+    const mood = document.createElement('div');
+    mood.className = 'history-item__mood';
+    mood.textContent = String(h.mood || 'neutral');
+
+    const date = document.createElement('div');
+    date.className = 'history-item__date';
+    date.textContent = formatDate(h.date);
+
+    item.append(emoji, mood, date);
+    frag.appendChild(item);
+  });
+  grid.appendChild(frag);
 }
 function formatDate(iso) {
   const d = new Date(iso);
@@ -340,7 +371,7 @@ async function sendChat() {
 
   state.chat.push({ role: 'user', text });
   appendChatMsg('user', text);
-  const typing = appendChatMsg('bot', '<span></span><span></span><span></span>', true);
+  const typing = appendChatMsg('bot', '', true);
 
   try {
     const r = await fetch('/api/chat', {
@@ -357,12 +388,18 @@ async function sendChat() {
     appendChatMsg('bot', `Hmm, ${err.message || "something's off"}. Try again in a moment.`);
   }
 }
-function appendChatMsg(who, html, typing = false) {
+function appendChatMsg(who, text, typing = false) {
   const log = $('#chat-log');
   const div = document.createElement('div');
   div.className = `chat__msg chat__msg--${who}` + (typing ? ' chat__msg--typing' : '');
-  if (typing) div.innerHTML = html;
-  else { const p = document.createElement('p'); p.textContent = html; div.appendChild(p); }
+  if (typing) {
+    // Static, developer-controlled markup (no user data) — build with DOM APIs anyway.
+    for (let i = 0; i < 3; i++) div.appendChild(document.createElement('span'));
+  } else {
+    const p = document.createElement('p');
+    p.textContent = String(text);
+    div.appendChild(p);
+  }
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;
   return div;
