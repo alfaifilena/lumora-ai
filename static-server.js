@@ -15,18 +15,21 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+// Frame-ancestors allow-list for CSP (env-driven).
+// Default includes Emergent preview parent domains so the preview iframe loads.
+// In production, override via env: FRAME_ANCESTORS="'self' https://yourapp.com"
+const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS ||
+  "'self' https://*.emergentagent.com https://*.emergent.sh")
+  .split(/\s+/).filter(Boolean);
+
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: false,
     directives: {
       'default-src':      ["'self'"],
-      // Scripts: strict — no inline execution allowed anywhere. SRI enforces integrity on the CDN script.
       'script-src':       ["'self'", 'https://cdnjs.cloudflare.com'],
       'script-src-elem':  ["'self'", 'https://cdnjs.cloudflare.com'],
       'script-src-attr':  ["'none'"],
-      // Styles: NO unsafe-inline on style-src-elem (no <style> blocks in HTML).
-      // style-src-attr keeps 'unsafe-inline' for JS-driven .style.property writes on transient effects
-      // (cursor glow position, aurora parallax transform, ripple, confidence bar width).
       'style-src':        ["'self'", 'https://fonts.googleapis.com'],
       'style-src-elem':   ["'self'", 'https://fonts.googleapis.com'],
       'style-src-attr':   ["'unsafe-inline'"],
@@ -34,7 +37,9 @@ app.use(helmet({
       'img-src':          ["'self'", 'data:', 'blob:'],
       'connect-src':      ["'self'"],
       'media-src':        ["'self'"],
-      'frame-ancestors':  ["'none'"],
+      // frame-ancestors is the modern replacement for X-Frame-Options and supports
+      // origin whitelists. X-Frame-Options is intentionally disabled below.
+      'frame-ancestors':  FRAME_ANCESTORS,
       'object-src':       ["'none'"],
       'base-uri':         ["'self'"],
       'form-action':      ["'self'"],
@@ -42,10 +47,11 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: 'same-site' },
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow iframe embedding of assets
   crossOriginOpenerPolicy:   { policy: 'same-origin' },
   referrerPolicy:            { policy: 'strict-origin-when-cross-origin' },
-  frameguard:                { action: 'deny' },
+  // X-Frame-Options doesn't support origin whitelists — CSP frame-ancestors does.
+  frameguard:                false,
   hidePoweredBy:             true,
   noSniff:                   true,
   strictTransportSecurity:   { maxAge: 15552000, includeSubDomains: true },
