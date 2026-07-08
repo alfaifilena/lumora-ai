@@ -41,9 +41,12 @@
     <span class="brand__text">Lumora <em>AI</em></span>
   </a>
   <nav class="nav__links">
-    <a href="#analyze" data-testid="nav-analyze">Analyze</a>
-    <a href="#dashboard" data-testid="nav-dashboard">Insight</a>
-    <a href="#history" data-testid="nav-history">History</a>
+    <a href="#analyze" data-i18n="nav.analyze" data-testid="nav-analyze">Analyze</a>
+    <a href="#dashboard" data-i18n="nav.insight" data-testid="nav-dashboard">Insight</a>
+    <a href="#history" data-i18n="nav.history" data-testid="nav-history">History</a>
+    <button id="lang-toggle" class="icon-btn icon-btn--lang" aria-label="Toggle language" data-testid="lang-toggle" title="Toggle language">
+      <span class="lang-label">EN</span>
+    </button>
     <button id="sound-toggle" class="icon-btn" aria-label="Toggle sound" data-testid="sound-toggle" title="Toggle sound">
       <svg class="i-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
       <svg class="i-sound-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>
@@ -80,11 +83,11 @@
       </span>
     </div>
     <h1 class="hero__title">
-      <span class="reveal">Transform your</span>
-      <span class="reveal reveal--italic">emotions</span>
-      <span class="reveal">into <em>beautiful</em> AI experiences.</span>
+      <span class="reveal" data-i18n="hero.title.a">Transform your</span>
+      <span class="reveal reveal--italic" data-i18n="hero.title.b">emotions</span>
+      <span class="reveal" data-i18n="hero.title.c">into <em>beautiful</em> AI experiences.</span>
     </h1>
-    <p class="hero__sub reveal">
+    <p class="hero__sub reveal" data-i18n="hero.sub">
       Write how you feel. Lumora reads the light behind your words and reshapes the world around you — colors, sounds, rituals — into a small, gentle sanctuary.
     </p>
 

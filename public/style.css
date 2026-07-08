@@ -580,7 +580,25 @@ body[data-sound="off"] .i-sound-on { display: none; }
   .aurora__blob { animation: none !important; }
 }
 
-/* ---------- Mobile tweaks ---------- */
+/* ---------- RTL (Arabic) ---------- */
+html[dir="rtl"] body { direction: rtl; text-align: right; }
+html[dir="rtl"] .brand { direction: ltr; }
+html[dir="rtl"] .hero__title,
+html[dir="rtl"] .hero__sub,
+html[dir="rtl"] .dashboard__title,
+html[dir="rtl"] .dashboard__sub { text-align: right; }
+html[dir="rtl"] .btn__arrow { transform: scaleX(-1); }
+html[dir="rtl"] .btn:hover .btn__arrow { transform: scaleX(-1) translateX(4px); }
+html[dir="rtl"] .chat { right: auto; left: 28px; }
+html[dir="rtl"] .fab   { right: auto; left: 28px; }
+html[dir="rtl"] .chat__msg--bot  { align-self: flex-end;  border-top-left-radius: 16px; border-top-right-radius: 4px; }
+html[dir="rtl"] .chat__msg--user { align-self: flex-start; border-top-right-radius: 16px; border-top-left-radius: 4px; }
+html[dir="rtl"] .composer__row,
+html[dir="rtl"] .history__head,
+html[dir="rtl"] .dashboard__head { flex-direction: row-reverse; }
+html[dir="rtl"] .card__mood { flex-direction: row-reverse; }
+.icon-btn--lang { min-width: 38px; font-weight: 600; font-size: 12px; letter-spacing: 0.06em; }
+.icon-btn--lang .lang-label { font-family: var(--font-mono); }
 @media (max-width: 720px) {
   .nav { padding: 14px 20px; }
   .nav__links { gap: 12px; }

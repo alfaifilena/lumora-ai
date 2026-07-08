@@ -21,7 +21,166 @@ function reportError(scope, err) {
   try { console.warn(`[Lumora:${scope}]`, err?.message || err); } catch { /* noop */ }
 }
 
-// ---------- CSRF token management ----------
+// ---------- i18n dictionary (English / Arabic) ----------
+const I18N = {
+  en: {
+    'nav.analyze': 'Analyze',
+    'nav.insight': 'Insight',
+    'nav.history': 'History',
+    'hero.title.a': 'Transform your',
+    'hero.title.b': 'emotions',
+    'hero.title.c': 'into <em>beautiful</em> AI experiences.',
+    'hero.sub': "Write how you feel. Lumora reads the light behind your words and reshapes the world around you — colors, sounds, rituals — into a small, gentle sanctuary.",
+    'hero.pill': 'Powered by Google Gemini AI',
+    'composer.placeholder': "Describe your thoughts… what's alive in you right now?",
+    'composer.hint': 'Press ⌘+↵ to analyze',
+    'btn.analyze': 'Analyze my mood',
+    'btn.new': 'New reading',
+    'btn.share': 'Share',
+    'btn.pdf': 'Export PDF',
+    'btn.clear': 'Clear',
+    'dashboard.eyebrow': 'Your aura today',
+    'card.mood': 'Mood',
+    'card.insight': '💡 AI Insight',
+    'card.selfcare': '🌱 Self care',
+    'card.breathing': '🧘 Breathing exercise',
+    'card.quote': '💬 Quote',
+    'card.affirmation': '⭐ Affirmation',
+    'card.music': '🎵 Music',
+    'card.intention': "🎯 Today's intention",
+    'history.eyebrow': 'Journal',
+    'history.title': 'Mood constellation',
+    'history.sub': "A soft record of every reading you've taken.",
+    'history.empty': 'Your constellation is empty. Take your first reading above.',
+    'chat.title': 'Lumora',
+    'chat.status': 'here with you',
+    'chat.placeholder': 'Say something…',
+    'chat.hello': "Hi, I'm Lumora. Tell me anything — I'll listen without judgement. ✦",
+    'foot': 'Lumora AI · a gentle experiment in emotional design ·',
+    'toast.copied': 'Copied to clipboard',
+    'toast.pdfSaved': 'PDF saved ✨',
+    'toast.historyCleared': 'History cleared',
+    'toast.soundOn': 'Sound on',
+    'toast.soundOff': 'Sound off',
+    'err.analyze': 'Something went softly wrong. Please try again in a moment.',
+    'err.chat': 'Lumora is quiet right now. Try again shortly.',
+    'err.input': 'Please share a little more about how you feel.',
+    'err.network': 'Cannot reach the Lumora server.',
+    'err.pdf': 'Could not create the PDF.',
+    'err.share': 'Could not share right now.',
+    'err.setup': 'Lumora needs an API key to fully wake up.',
+    'setup.title': 'One tiny step to light up Lumora',
+    'confidence': 'confidence',
+  },
+  ar: {
+    'nav.analyze': 'حلّل',
+    'nav.insight': 'رؤية',
+    'nav.history': 'السجل',
+    'hero.title.a': 'حوّل',
+    'hero.title.b': 'مشاعرك',
+    'hero.title.c': 'إلى تجارب ذكاء اصطناعي <em>جميلة</em>.',
+    'hero.sub': 'اكتب كيف تشعر. تقرأ لومورا النور الخفي خلف كلماتك، وتعيد تشكيل العالم من حولك — الألوان والأصوات والطقوس — لتصبح ملاذًا لطيفًا صغيرًا.',
+    'hero.pill': 'مدعوم بذكاء Google Gemini',
+    'composer.placeholder': 'صف أفكارك… ما الذي يحيا فيك الآن؟',
+    'composer.hint': 'اضغط ⌘+↵ للتحليل',
+    'btn.analyze': 'حلّل مزاجي',
+    'btn.new': 'قراءة جديدة',
+    'btn.share': 'شارك',
+    'btn.pdf': 'تصدير PDF',
+    'btn.clear': 'مسح',
+    'dashboard.eyebrow': 'هالتك اليوم',
+    'card.mood': 'المزاج',
+    'card.insight': '💡 رؤية الذكاء',
+    'card.selfcare': '🌱 عناية بالذات',
+    'card.breathing': '🧘 تمرين تنفس',
+    'card.quote': '💬 اقتباس',
+    'card.affirmation': '⭐ تأكيد',
+    'card.music': '🎵 موسيقى',
+    'card.intention': '🎯 نيّة اليوم',
+    'history.eyebrow': 'دفتر',
+    'history.title': 'كوكبة المزاج',
+    'history.sub': 'سجل لطيف لكل قراءة قمت بها.',
+    'history.empty': 'كوكبتك فارغة بعد. خذ قراءتك الأولى في الأعلى.',
+    'chat.title': 'لومورا',
+    'chat.status': 'هنا معك',
+    'chat.placeholder': 'قل شيئًا…',
+    'chat.hello': 'مرحبًا، أنا لومورا. أخبرني بأي شيء — سأستمع دون حكم. ✦',
+    'foot': 'لومورا · تجربة رقيقة في تصميم المشاعر ·',
+    'toast.copied': 'تم النسخ',
+    'toast.pdfSaved': 'تم حفظ PDF ✨',
+    'toast.historyCleared': 'تم مسح السجل',
+    'toast.soundOn': 'الصوت مفعّل',
+    'toast.soundOff': 'الصوت مغلق',
+    'err.analyze': 'حدث خطأ خفيف. حاول مرة أخرى بعد لحظات.',
+    'err.chat': 'لومورا هادئة الآن. حاول مجددًا بعد قليل.',
+    'err.input': 'شاركني قليلًا أكثر عن مشاعرك.',
+    'err.network': 'لا يمكن الوصول إلى خادم لومورا.',
+    'err.pdf': 'تعذّر إنشاء ملف PDF.',
+    'err.share': 'تعذّرت المشاركة الآن.',
+    'err.setup': 'تحتاج لومورا إلى مفتاح API لتستيقظ بالكامل.',
+    'setup.title': 'خطوة صغيرة لتضيء لومورا',
+    'confidence': 'ثقة',
+  },
+};
+
+// Detect Arabic characters in a string (used for auto-language on input).
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+function detectLang(text) {
+  return ARABIC_RE.test(String(text || '')) ? 'ar' : 'en';
+}
+
+function t(key) {
+  const dict = I18N[state.lang] || I18N.en;
+  return dict[key] ?? I18N.en[key] ?? key;
+}
+
+function applyLanguage(lang) {
+  if (!I18N[lang]) lang = 'en';
+  state.lang = lang;
+  localStorage.setItem('lumora.lang', lang);
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  // Update every element with data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    // Allow <em> markup only for our own trusted i18n strings.
+    if (/^[^<]*<em>[^<]+<\/em>[^<]*$/.test(val)) {
+      el.textContent = '';
+      val.split(/(<em>|<\/em>)/).forEach(chunk => {
+        if (chunk === '<em>' || chunk === '</em>') return;
+      });
+      // Rebuild safely with a single <em> element
+      const [before, rest] = val.split('<em>');
+      const [emText, after] = rest.split('</em>');
+      el.appendChild(document.createTextNode(before));
+      const em = document.createElement('em'); em.textContent = emText;
+      el.appendChild(em);
+      el.appendChild(document.createTextNode(after));
+    } else {
+      el.textContent = val;
+    }
+  });
+  // Placeholders + button label + setup title
+  const input = $('#feeling-input'); if (input) input.setAttribute('placeholder', t('composer.placeholder'));
+  const chatInput = $('#chat-input'); if (chatInput) chatInput.setAttribute('placeholder', t('chat.placeholder'));
+  const langLabel = $('#lang-toggle .lang-label'); if (langLabel) langLabel.textContent = lang === 'ar' ? 'ع' : 'EN';
+  const setupCard = $('#setup-notice h2'); if (setupCard) setupCard.textContent = t('setup.title');
+  const btnLabel = $('.btn__label'); if (btnLabel) btnLabel.textContent = t('btn.analyze');
+  const composerHint = $('.composer__hint');
+  if (composerHint) {
+    // Preserve counter — replace textContent-only nodes and keep the counter span.
+    composerHint.childNodes.forEach(n => { if (n.nodeType === 3) n.remove(); });
+    const cnt = $('#char-count');
+    composerHint.textContent = '';
+    composerHint.appendChild(cnt);
+    composerHint.appendChild(document.createTextNode('/1200 · ' + t('composer.hint')));
+  }
+  // Refresh dynamic UI
+  renderHistory();
+  if (state.currentData) renderDashboard(state.currentData);
+}
 // Fetched on init from GET /api/csrf; sent as X-CSRF-Token on every POST.
 let csrfToken = null;
 async function fetchCsrfToken() {
@@ -61,6 +220,7 @@ const state = {
   history: [],              // populated on DOMContentLoaded via loadHistory()
   soundOn: localStorage.getItem('lumora.sound') === 'on',
   theme: localStorage.getItem('lumora.theme') || 'dark',
+  lang: localStorage.getItem('lumora.lang') || (/^ar\b/i.test(navigator.language || '') ? 'ar' : 'en'),
   chat: [],                 // [{role, text}]
 };
 
@@ -91,6 +251,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.body.dataset.theme = state.theme;
   document.body.dataset.sound = state.soundOn ? 'on' : 'off';
   state.history = loadHistory();
+  applyLanguage(state.lang);
   wireUI();
   setupParticles();
   setupCursorGlow();
@@ -118,7 +279,13 @@ function wireUI() {
     document.body.dataset.sound = state.soundOn ? 'on' : 'off';
     localStorage.setItem('lumora.sound', state.soundOn ? 'on' : 'off');
     if (state.soundOn) playTone('chime');
-    toast(state.soundOn ? 'Sound on' : 'Sound off');
+    toast(state.soundOn ? t('toast.soundOn') : t('toast.soundOff'));
+  });
+
+  // language toggle
+  $('#lang-toggle').addEventListener('click', () => {
+    applyLanguage(state.lang === 'ar' ? 'en' : 'ar');
+    playTone('tick');
   });
 
   // char counter
@@ -174,7 +341,9 @@ async function analyze() {
   $('#analyzing').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   try {
-    const { r, j } = await apiPost('/api/analyze', { text });
+    // Auto-detect language from user input; fall back to UI language.
+    const lang = detectLang(text) || state.lang;
+    const { r, j } = await apiPost('/api/analyze', { text, lang });
 
     if (!r.ok) {
       if (j.setupRequired) {
@@ -438,9 +607,11 @@ async function sendChat() {
   const typing = appendChatMsg('bot', '', true);
 
   try {
+    const lang = detectLang(text) || state.lang;
     const { r, j } = await apiPost('/api/chat', {
       messages: state.chat.slice(-20),
       mood: state.currentMood,
+      lang,
     });
     typing.remove();
     if (!r.ok) {
