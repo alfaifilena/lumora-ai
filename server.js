@@ -123,9 +123,9 @@ function sanitizeUserText(input, maxLen = 2000) {
 // 11-mood palette. Mapping to closest whitelisted mood.
 const MOOD_ALIASES = new Map([
   ['stressed','anxious'],  ['worried','anxious'],   ['nervous','anxious'],
-  ['peaceful','calm'],     ['relaxed','calm'],       ['content','calm'],   ['serene','calm'],
+  ['peaceful','calm'],     ['relaxed','calm'],       ['serene','calm'],
+  ['content','happy'],     ['joyful','happy'],       ['cheerful','happy'],  ['delighted','happy'],
   ['thankful','grateful'], ['appreciative','grateful'],
-  ['joyful','happy'],      ['cheerful','happy'],     ['delighted','happy'], ['content','happy'],
   ['sorrowful','sad'],     ['melancholy','sad'],     ['down','sad'],
   ['optimistic','hopeful'],['inspired','motivated'],
   ['furious','angry'],     ['frustrated','angry'],   ['irritated','angry'],
@@ -155,11 +155,13 @@ function isQuotaExhaustedError(err) {
 
 // Real Gemini call with 2 layers of resilience:
 //   1. Retry on transient 503/high-demand (same model, exponential backoff).
-//   2. If the model's DAILY quota is exhausted (429 RESOURCE_EXHAUSTED),
-//      cascade to the next real Gemini model in ALL_MODELS (independent quotas).
+//   2. Skip to the next fallback model on any per-model error that won't
+//      resolve with retries: quota exhausted (429), model not found (404),
+//      unsupported argument for that model (400).
 // Never returns a canned/fabricated response — always a real Gemini output OR throws.
 async function generateWithRetry(baseRequest, attempts = 3) {
   let lastErr;
+  const failures = [];
   for (const modelName of ALL_MODELS) {
     for (let i = 0; i < attempts; i++) {
       try {
@@ -167,15 +169,26 @@ async function generateWithRetry(baseRequest, attempts = 3) {
       } catch (e) {
         lastErr = e;
         const msg = String(e?.message || '');
-        // Per-model daily quota exhausted → try next model in chain immediately.
-        if (isQuotaExhaustedError(e)) break;
+        // Per-model unrecoverable → skip to next model in chain.
+        //   429 RESOURCE_EXHAUSTED  → daily quota hit
+        //   404 NOT_FOUND           → model name invalid for this API surface
+        //   400 INVALID_ARGUMENT    → config not supported by this model
+        //   403 PERMISSION_DENIED   → key can't access this model
+        if (isQuotaExhaustedError(e) || /404|NOT_FOUND|400|INVALID_ARGUMENT|403|PERMISSION_DENIED/i.test(msg)) {
+          failures.push({ model: modelName, reason: msg.slice(0, 120) });
+          break;
+        }
         // Transient overload → retry same model with backoff.
         const transient = /503|UNAVAILABLE|high demand|502|504/i.test(msg);
-        if (!transient || i === attempts - 1) throw e;
+        if (!transient || i === attempts - 1) {
+          failures.push({ model: modelName, reason: msg.slice(0, 120) });
+          break;
+        }
         await new Promise(r => setTimeout(r, 400 * Math.pow(2, i) + Math.random() * 200));
       }
     }
   }
+  console.error('[gemini] all models failed:', JSON.stringify(failures));
   throw lastErr;
 }
 
