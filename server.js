@@ -181,8 +181,8 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
 
   // Production-only: state-changing calls to sensitive endpoints must come from a
-  // trusted origin. We validate against BOTH the Origin header AND X-Forwarded-Host,
-  // so this works whether the ingress rewrites Origin or not.
+  // trusted origin. We validate against Origin, falling back to Referer, both
+  // against the same allow-list (see isTrustedRequest above).
   if (IS_PROD && req.method === 'POST' && req.path.startsWith('/api/') && req.path !== '/api/health') {
     if (!isTrustedRequest(req)) {
       return res.status(403).json({ error: 'Forbidden.' });
