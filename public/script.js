@@ -17,9 +17,41 @@ const USER_ERRORS = {
   setup:   'Lumora needs an API key to fully wake up.',
 };
 
-// Log details to console for debugging, but never show them to end users.
 function reportError(scope, err) {
   try { console.warn(`[Lumora:${scope}]`, err?.message || err); } catch { /* noop */ }
+}
+
+// ---------- CSRF token management ----------
+// Fetched on init from GET /api/csrf; sent as X-CSRF-Token on every POST.
+let csrfToken = null;
+async function fetchCsrfToken() {
+  try {
+    const r = await fetch('/api/csrf', { credentials: 'same-origin' });
+    const j = await r.json();
+    if (j?.csrfToken) csrfToken = j.csrfToken;
+  } catch (err) { reportError('csrf', err); }
+}
+
+// Reusable safe fetch — always JSON, attaches CSRF token on writes, retries once
+// if the server signals csrfInvalid (token expired).
+async function apiPost(path, body) {
+  const doFetch = () => fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  let r = await doFetch();
+  let j = await r.json().catch(() => ({}));
+  if (r.status === 403 && j?.csrfInvalid) {
+    await fetchCsrfToken();
+    r = await doFetch();
+    j = await r.json().catch(() => ({}));
+  }
+  return { r, j };
 }
 
 // ---------- State ----------
@@ -55,31 +87,20 @@ const MOOD_MUSIC = {
 };
 
 // ---------- Init ----------
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   document.body.dataset.theme = state.theme;
   document.body.dataset.sound = state.soundOn ? 'on' : 'off';
-  // Load persisted history AFTER DOM is ready — avoids any TDZ / init-order edge cases.
   state.history = loadHistory();
   wireUI();
   setupParticles();
   setupCursorGlow();
   renderHistory();
-  checkHealth();
+  await fetchCsrfToken();
 });
 
-// ---------- Health check → show setup page if no key ----------
-async function checkHealth() {
-  try {
-    const r = await fetch('/api/health');
-    const j = await r.json();
-    if (!j.ready) {
-      $('#setup-notice').hidden = false;
-    }
-  } catch (err) {
-    reportError('health', err);
-    toast(USER_ERRORS.network, 'err');
-  }
-}
+// Setup notice is shown reactively when a POST returns setupRequired.
+// We no longer proactively probe /api/health because it returns only {ok:true}
+// (readiness info is intentionally not exposed).
 
 // ---------- UI wiring ----------
 function wireUI() {
@@ -153,22 +174,12 @@ async function analyze() {
   $('#analyzing').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   try {
-    const r = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    const j = await r.json().catch(() => ({}));
+    const { r, j } = await apiPost('/api/analyze', { text });
 
     if (!r.ok) {
-      // Show setup notice for the specific known "setup required" case,
-      // quota-exhausted → specific actionable message, everything else → generic.
       if (j.setupRequired) {
         $('#setup-notice').hidden = false;
         toast(USER_ERRORS.setup, 'err');
-      } else if (j.quotaExhausted) {
-        const wait = j.retryAfter ? ` (retry in ~${j.retryAfter}s)` : '';
-        toast(`Gemini daily quota reached${wait}. Upgrade at ai.google.dev to keep going.`, 'err');
       } else {
         toast(USER_ERRORS.analyze, 'err');
       }
@@ -421,27 +432,24 @@ async function sendChat() {
   input.value = '';
 
   state.chat.push({ role: 'user', text });
+  // Cap client-side chat history to the last 100 messages to prevent unbounded memory growth.
+  if (state.chat.length > 100) state.chat = state.chat.slice(-100);
   appendChatMsg('user', text);
   const typing = appendChatMsg('bot', '', true);
 
   try {
-    const r = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ messages: state.chat, mood: state.currentMood })
+    const { r, j } = await apiPost('/api/chat', {
+      messages: state.chat.slice(-20),
+      mood: state.currentMood,
     });
-    const j = await r.json().catch(() => ({}));
     typing.remove();
     if (!r.ok) {
-      if (j.quotaExhausted) {
-        const wait = j.retryAfter ? ` (retry in ~${j.retryAfter}s)` : '';
-        appendChatMsg('bot', `Gemini daily quota reached${wait}. Upgrade at ai.google.dev to keep going.`);
-      } else {
-        appendChatMsg('bot', USER_ERRORS.chat);
-      }
+      appendChatMsg('bot', USER_ERRORS.chat);
       reportError('chat', new Error(`HTTP ${r.status}`));
       return;
     }
     state.chat.push({ role: 'model', text: j.reply });
+    if (state.chat.length > 100) state.chat = state.chat.slice(-100);
     appendChatMsg('bot', j.reply);
   } catch (err) {
     typing.remove();

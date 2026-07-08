@@ -1,6 +1,13 @@
-// Lumora AI — static frontend server on :3000 (v2 hardened)
-// Split CSP: style-src-elem strict (no unsafe-inline), style-src-attr keeps
-// 'unsafe-inline' only for JS-driven .style.property writes on transient effects.
+// Lumora AI — static frontend server on :3000 (v3 hardened)
+// Strict CSP:
+//   • default-src 'none' (deny by default)
+//   • script-src / style-src / img-src / font-src / connect-src explicit
+//   • no unsafe-inline in script-src or style-src-elem
+//   • style-src-attr keeps 'unsafe-inline' ONLY because JS-driven animations
+//     (cursor glow, aurora parallax, ripple, confidence bar) write to
+//     element.style at runtime — style-attr XSS surface is minimal and
+//     browsers don't allow nonces on attribute styles per CSP3.
+//   • object-src 'none', base-uri 'none', frame-ancestors from env allow-list.
 
 import 'dotenv/config';
 import express from 'express';
@@ -11,47 +18,46 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT_STATIC || 3000);
 
-const app = express();
-app.set('trust proxy', 1);
-app.disable('x-powered-by');
-
-// Frame-ancestors allow-list for CSP (env-driven).
-// Default includes Emergent preview parent domains so the preview iframe loads.
-// In production, override via env: FRAME_ANCESTORS="'self' https://yourapp.com"
+// Frame-ancestors from env — no wildcards, only trusted domains.
+// FRAME_ANCESTORS is a whitespace-separated CSP source list.
+// Default keeps preview embedding working; production should override.
 const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS ||
-  "'self' https://*.emergentagent.com https://*.emergent.sh")
+  "'self' https://emotion-aura.preview.emergentagent.com")
   .split(/\s+/).filter(Boolean);
+
+const app = express();
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+app.disable('x-powered-by');
 
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: false,
     directives: {
-      'default-src':      ["'self'"],
+      'default-src':      ["'none'"],
       'script-src':       ["'self'", 'https://cdnjs.cloudflare.com'],
       'script-src-elem':  ["'self'", 'https://cdnjs.cloudflare.com'],
       'script-src-attr':  ["'none'"],
       'style-src':        ["'self'", 'https://fonts.googleapis.com'],
       'style-src-elem':   ["'self'", 'https://fonts.googleapis.com'],
-      'style-src-attr':   ["'unsafe-inline'"],
+      'style-src-attr':   ["'unsafe-inline'"],   // required for JS-driven .style writes; documented above
       'font-src':         ["'self'", 'https://fonts.gstatic.com', 'data:'],
       'img-src':          ["'self'", 'data:', 'blob:'],
       'connect-src':      ["'self'"],
       'media-src':        ["'self'"],
-      // frame-ancestors is the modern replacement for X-Frame-Options and supports
-      // origin whitelists. X-Frame-Options is intentionally disabled below.
       'frame-ancestors':  FRAME_ANCESTORS,
       'object-src':       ["'none'"],
-      'base-uri':         ["'self'"],
+      'base-uri':         ["'none'"],
       'form-action':      ["'self'"],
+      'manifest-src':     ["'self'"],
+      'worker-src':       ["'self'"],
       'upgrade-insecure-requests': [],
     },
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow iframe embedding of assets
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy:   { policy: 'same-origin' },
   referrerPolicy:            { policy: 'strict-origin-when-cross-origin' },
-  // X-Frame-Options doesn't support origin whitelists — CSP frame-ancestors does.
-  frameguard:                false,
+  frameguard:                false, // CSP frame-ancestors is authoritative
   hidePoweredBy:             true,
   noSniff:                   true,
   strictTransportSecurity:   { maxAge: 15552000, includeSubDomains: true },
@@ -59,10 +65,8 @@ app.use(helmet({
 }));
 
 app.use((_req, res, next) => {
-  res.setHeader(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()'
-  );
+  res.setHeader('Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()');
   next();
 });
 

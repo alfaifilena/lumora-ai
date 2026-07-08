@@ -48,3 +48,6 @@ test_result.md
 
 # Legacy / stray artifacts
 gitignore.txt
+.env.*
+*.env
+.credentials
