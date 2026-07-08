@@ -12,8 +12,14 @@ import { GoogleGenAI, Type } from '@google/genai';
 
 // ---------- Config (env only) ----------
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
-// Model is configurable via env — no longer hardcoded in shipped source.
+// Primary model + optional fallback chain. When the primary hits its per-model
+// daily quota (RESOURCE_EXHAUSTED), we try the next fallback (independent quota).
+// All must be real Gemini models — this is NOT a canned/hardcoded response fallback.
 const MODEL = (process.env.GEMINI_MODEL || 'gemini-3-flash-preview').trim();
+const MODEL_FALLBACKS = (process.env.GEMINI_MODEL_FALLBACKS ||
+  'gemini-2.5-flash,gemini-1.5-flash')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const ALL_MODELS = [MODEL, ...MODEL_FALLBACKS.filter(m => m !== MODEL)];
 const PORT = Number(process.env.PORT_API || 8001);
 const IS_PROD = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 
@@ -67,9 +73,9 @@ You detect emotions and respond with kindness. When asked for JSON, output ONLY 
 const ANALYZE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    mood:              { type: Type.STRING },
+    mood:              { type: Type.STRING, description: 'EXACTLY ONE lowercase word from this list, nothing else: happy, calm, sad, excited, motivated, lonely, hopeful, anxious, angry, grateful, neutral' },
     emoji:             { type: Type.STRING },
-    confidence:        { type: Type.NUMBER },
+    confidence:        { type: Type.NUMBER, description: 'Integer 0-100' },
     explanation:       { type: Type.STRING },
     advice:            { type: Type.STRING },
     quote:             { type: Type.STRING },
@@ -83,6 +89,24 @@ const ANALYZE_SCHEMA = {
   required: ['mood','emoji','confidence','explanation','advice','quote','quoteAuthor','affirmation','breathingExercise','selfCareTip','musicGenre','intention'],
 };
 
+// Extract the best-matching whitelist mood from Gemini's response, which
+// sometimes returns multi-word answers like "grateful and calm" or "happy/excited".
+function coerceMood(raw) {
+  const s = String(raw || '').toLowerCase().trim();
+  if (!s) return 'neutral';
+  // Fast path: exact whitelist match
+  if (MOOD_WHITELIST.has(s)) return s;
+  if (MOOD_ALIASES.has(s)) return MOOD_ALIASES.get(s);
+  // Multi-word or slash-separated: split into tokens and return the first
+  // token that matches the whitelist or an alias.
+  const tokens = s.split(/[^a-z]+/i).filter(Boolean);
+  for (const t of tokens) {
+    if (MOOD_WHITELIST.has(t)) return t;
+    if (MOOD_ALIASES.has(t)) return MOOD_ALIASES.get(t);
+  }
+  return 'neutral';
+}
+
 // ---------- Sanitization ----------
 const DELIMITER_RE = /<\/?(BEGIN|END)_USER_(FEELING|MESSAGE|CONTEXT)>/gi;
 function sanitizeUserText(input, maxLen = 2000) {
@@ -95,15 +119,61 @@ function sanitizeUserText(input, maxLen = 2000) {
     .slice(0, maxLen);
 }
 
-async function generateWithRetry(request, attempts = 3) {
+// Aliases for moods that Gemini sometimes returns which aren't literally in our
+// 11-mood palette. Mapping to closest whitelisted mood.
+const MOOD_ALIASES = new Map([
+  ['stressed','anxious'],  ['worried','anxious'],   ['nervous','anxious'],
+  ['peaceful','calm'],     ['relaxed','calm'],       ['content','calm'],   ['serene','calm'],
+  ['thankful','grateful'], ['appreciative','grateful'],
+  ['joyful','happy'],      ['cheerful','happy'],     ['delighted','happy'], ['content','happy'],
+  ['sorrowful','sad'],     ['melancholy','sad'],     ['down','sad'],
+  ['optimistic','hopeful'],['inspired','motivated'],
+  ['furious','angry'],     ['frustrated','angry'],   ['irritated','angry'],
+  ['isolated','lonely'],   ['alone','lonely'],
+  ['energetic','excited'], ['thrilled','excited'],
+]);
+
+// Normalize confidence: Gemini sometimes returns 0-1 fractions instead of 0-100.
+function normalizeConfidence(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  const pct = n <= 1 ? Math.round(n * 100) : Math.round(n);
+  return Math.max(0, Math.min(100, pct));
+}
+function parseRetryAfter(err) {
+  const msg = String(err?.message || '');
+  const m = msg.match(/retry in ([\d.]+)s/i);
+  if (m) return Math.ceil(Number(m[1]));
+  return null;
+}
+
+// Detects Google RESOURCE_EXHAUSTED (429 daily quota exhaustion for the given model).
+function isQuotaExhaustedError(err) {
+  const msg = String(err?.message || '');
+  return /RESOURCE_EXHAUSTED|"code":\s*429|quota/i.test(msg);
+}
+
+// Real Gemini call with 2 layers of resilience:
+//   1. Retry on transient 503/high-demand (same model, exponential backoff).
+//   2. If the model's DAILY quota is exhausted (429 RESOURCE_EXHAUSTED),
+//      cascade to the next real Gemini model in ALL_MODELS (independent quotas).
+// Never returns a canned/fabricated response — always a real Gemini output OR throws.
+async function generateWithRetry(baseRequest, attempts = 3) {
   let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    try { return await ai.models.generateContent(request); }
-    catch (e) {
-      lastErr = e;
-      const transient = /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand/i.test(String(e?.message || ''));
-      if (!transient || i === attempts - 1) throw e;
-      await new Promise(r => setTimeout(r, 400 * Math.pow(2, i) + Math.random() * 200));
+  for (const modelName of ALL_MODELS) {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await ai.models.generateContent({ ...baseRequest, model: modelName });
+      } catch (e) {
+        lastErr = e;
+        const msg = String(e?.message || '');
+        // Per-model daily quota exhausted → try next model in chain immediately.
+        if (isQuotaExhaustedError(e)) break;
+        // Transient overload → retry same model with backoff.
+        const transient = /503|UNAVAILABLE|high demand|502|504/i.test(msg);
+        if (!transient || i === attempts - 1) throw e;
+        await new Promise(r => setTimeout(r, 400 * Math.pow(2, i) + Math.random() * 200));
+      }
     }
   }
   throw lastErr;
@@ -251,7 +321,6 @@ app.post('/api/analyze', analyzeLimiter, async (req, res) => {
 
   try {
     const response = await generateWithRetry({
-      model: MODEL,
       contents: [{
         role: 'user',
         parts: [
@@ -266,7 +335,6 @@ app.post('/api/analyze', analyzeLimiter, async (req, res) => {
         responseMimeType: 'application/json',
         responseSchema: ANALYZE_SCHEMA,
         temperature: 0.85,
-        thinkingConfig: { thinkingLevel: 'low' },
       },
     });
 
@@ -275,16 +343,21 @@ app.post('/api/analyze', analyzeLimiter, async (req, res) => {
     try { parsed = JSON.parse(raw); }
     catch { return res.status(502).json({ error: 'Received an invalid response, please try again.' }); }
 
-    parsed.confidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
-    parsed.mood = String(parsed.mood || 'neutral').toLowerCase();
-    // Common alias that isn't in the palette — map to the closest whitelisted mood.
-    if (parsed.mood === 'stressed') parsed.mood = 'anxious';
-    if (!MOOD_WHITELIST.has(parsed.mood)) parsed.mood = 'neutral';
+    parsed.confidence = normalizeConfidence(parsed.confidence);
+    parsed.mood = coerceMood(parsed.mood);
 
     res.json({ ok: true, data: parsed });
   } catch (err) {
     console.error('[analyze] error:', err?.message || err);
-    // Never leak upstream/AI errors — always send a generic message.
+    if (isQuotaExhaustedError(err)) {
+      const retryAfter = parseRetryAfter(err);
+      res.setHeader('Retry-After', String(retryAfter || 60));
+      return res.status(429).json({
+        error: 'Gemini daily free-tier quota reached. Please wait a minute and retry, or upgrade your key at ai.google.dev.',
+        quotaExhausted: true,
+        retryAfter: retryAfter || 60,
+      });
+    }
     res.status(500).json({ error: 'Lumora could not read the stars right now. Try again in a moment.' });
   }
 });
@@ -324,7 +397,6 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
 
   try {
     const response = await generateWithRetry({
-      model: MODEL,
       contents,
       config: {
         systemInstruction: SYSTEM_PROMPT + moodContext,
@@ -335,6 +407,15 @@ app.post('/api/chat', chatLimiter, async (req, res) => {
     res.json({ ok: true, reply: response.text ?? '…' });
   } catch (err) {
     console.error('[chat] error:', err?.message || err);
+    if (isQuotaExhaustedError(err)) {
+      const retryAfter = parseRetryAfter(err);
+      res.setHeader('Retry-After', String(retryAfter || 60));
+      return res.status(429).json({
+        error: 'Gemini daily free-tier quota reached. Please wait a minute and retry, or upgrade your key at ai.google.dev.',
+        quotaExhausted: true,
+        retryAfter: retryAfter || 60,
+      });
+    }
     res.status(500).json({ error: 'Lumora is quiet right now. Try again shortly.' });
   }
 });

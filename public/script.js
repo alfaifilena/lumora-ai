@@ -162,10 +162,13 @@ async function analyze() {
 
     if (!r.ok) {
       // Show setup notice for the specific known "setup required" case,
-      // otherwise show a generic user-friendly message.
+      // quota-exhausted → specific actionable message, everything else → generic.
       if (j.setupRequired) {
         $('#setup-notice').hidden = false;
         toast(USER_ERRORS.setup, 'err');
+      } else if (j.quotaExhausted) {
+        const wait = j.retryAfter ? ` (retry in ~${j.retryAfter}s)` : '';
+        toast(`Gemini daily quota reached${wait}. Upgrade at ai.google.dev to keep going.`, 'err');
       } else {
         toast(USER_ERRORS.analyze, 'err');
       }
@@ -429,7 +432,12 @@ async function sendChat() {
     const j = await r.json().catch(() => ({}));
     typing.remove();
     if (!r.ok) {
-      appendChatMsg('bot', USER_ERRORS.chat);
+      if (j.quotaExhausted) {
+        const wait = j.retryAfter ? ` (retry in ~${j.retryAfter}s)` : '';
+        appendChatMsg('bot', `Gemini daily quota reached${wait}. Upgrade at ai.google.dev to keep going.`);
+      } else {
+        appendChatMsg('bot', USER_ERRORS.chat);
+      }
       reportError('chat', new Error(`HTTP ${r.status}`));
       return;
     }
